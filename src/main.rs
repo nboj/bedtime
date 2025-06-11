@@ -84,7 +84,7 @@ fn trigger_bedtime(tree: &Db) {
     // NOTE: needs to allow shutdown without sudo
     let command = std::process::Command::new("sh")
         .arg("-c")
-        .arg("ssh cauman@192.168.1.54 \"sudo shutdown now\"")
+        .arg("ssh cauman@192.168.1.62 \"sudo shutdown now\"")
         //.arg("shutdown now")
         .output()
         .expect("Failed to execute process");
@@ -129,7 +129,7 @@ fn run_daemon() {
             triggered_warning = true;
             let command = std::process::Command::new("sh")
                 .arg("-c")
-                .arg("ssh cauman@192.168.1.54 \"notify-send 'Shutting down in 5 minutes...'\"")
+                .arg("ssh cauman@192.168.1.62 \"notify-send 'Shutting down in 5 minutes...'\"")
                 //.arg("shutdown now")
                 .output()
                 .expect("Failed to execute process");
