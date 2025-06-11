@@ -6,5 +6,7 @@ edition = "2024"
 [dependencies]
 chrono = "0.4.41"
 clap = { version = "4.5.39", features = ["derive"] }
+dotenv = "0.15.0"
+rspotify = {version = "0.14.0", features = ["cli"]}
 sled = "0.34.7"
 tokio = { version = "1", features = ["full"] }
