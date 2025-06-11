@@ -7,7 +7,7 @@ use std::{
 
 use chrono::{Local, NaiveTime};
 use clap::Command;
-use sled::IVec;
+use sled::{Db, IVec};
 
 const SOCKET_PATH: &str = "/tmp/bedtime.sock";
 const STATUS_PATH: &str = "/tmp/bedtime";
@@ -18,7 +18,7 @@ const WAKEUP_TIME: NaiveTime =
     NaiveTime::from_hms_opt(5, 0, 0).expect("Invalid target time configuration.");
 
 // returns true when ending daemon
-fn handle_input(listener: &UnixListener) -> bool {
+fn handle_input(listener: &UnixListener, tree: &Db) -> bool {
     let accept = listener.accept();
     match accept {
         Ok((mut stream, _addr)) => {
@@ -35,6 +35,11 @@ fn handle_input(listener: &UnixListener) -> bool {
                         let _ = stream.write_all(format!("Ending daemon...").as_bytes());
                         let _ = stream.flush();
                         return true;
+                    }
+                    "reset" => {
+                        let _ = tree.insert("triggered", "false");
+                        let _ = stream.write_all(format!("Reset variables.").as_bytes());
+                        let _ = stream.flush();
                     }
                     _ => {
                         let _ = stream.write_all(format!("Error: Invalid command.").as_bytes());
@@ -72,8 +77,30 @@ fn print_status(stream: &mut UnixStream) {
     }
 }
 
+fn trigger_bedtime(tree: &Db) {
+    println!("Triggering events...");
+    let _ = tree.insert("triggered", "true");
+    let _ = tree.flush();
+    // NOTE: needs to allow shutdown without sudo
+    let command = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("ssh cauman@192.168.1.54 \"sudo shutdown now\"")
+        //.arg("shutdown now")
+        .output()
+        .expect("Failed to execute process");
+
+    let stdout = String::from_utf8_lossy(&command.stdout);
+    let stderr = String::from_utf8_lossy(&command.stderr);
+
+    println!("stdout: {}", stdout);
+    if !stderr.is_empty() {
+        eprintln!("stderr: {}", stderr);
+    }
+}
+
 fn run_daemon() {
     println!("Enabling...");
+    let mut triggered_warning = false;
     if Path::new(SOCKET_PATH).exists() {
         let _ = std::fs::remove_file(SOCKET_PATH);
     }
@@ -91,15 +118,23 @@ fn run_daemon() {
         };
         if now >= BED_TIME || now <= WAKEUP_TIME {
             if triggered == IVec::from("false") {
-                println!("triggerringngngngngn");
-                let _ = tree.insert("triggered", "true");
-                let _ = tree.flush();
+                trigger_bedtime(&tree);
             }
         } else if triggered == IVec::from("true") {
             let _ = tree.insert("triggered", "false");
             let _ = tree.flush();
         }
-        let should_end = handle_input(&listener);
+        if !triggered_warning && (BED_TIME - now).num_seconds() < 20 * 60 {
+            println!("Warned shut down in 5 minutes.");
+            triggered_warning = true;
+            let command = std::process::Command::new("sh")
+                .arg("-c")
+                .arg("ssh cauman@192.168.1.54 \"notify-send 'Shutting down in 5 minutes...'\"")
+                //.arg("shutdown now")
+                .output()
+                .expect("Failed to execute process");
+        }
+        let should_end = handle_input(&listener, &tree);
         if should_end {
             break;
         }
@@ -134,6 +169,7 @@ fn main() {
         .subcommand(Command::new("start").about("Start program"))
         .subcommand(Command::new("status").about("Check program status"))
         .subcommand(Command::new("stop").about("Stops the program"))
+        .subcommand(Command::new("reset").about("Resets the program"))
         .get_matches();
     match matches.subcommand() {
         Some(("start", _matches)) => {
@@ -156,6 +192,9 @@ fn main() {
         }
         Some(("stop", _matches)) => {
             send_command("stop");
+        }
+        Some(("reset", _matches)) => {
+            send_command("reset");
         }
         Some(_) | None => {
             eprintln!("Not a command.");
