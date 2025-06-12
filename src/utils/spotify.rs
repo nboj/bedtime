@@ -18,7 +18,7 @@ async fn with_auth(creds: Credentials, oauth: OAuth, config: Config) {
         let mut _device: Option<Device> = None;
         for device in devices {
             println!("{}", device.name);
-            if device.name == "loki" {
+            if device.name == "Christian's Echo Spot" {
                 _device = Some(device);
             }
         }
